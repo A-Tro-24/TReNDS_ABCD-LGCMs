@@ -1,0 +1,393 @@
+---
+title: "Model Building Framework for ABCD Data (Part 1)"
+author: "Aidan H. Troha"
+date: Sys.date()
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(readr)
+library(lavaan)
+library(lavaanExtra)
+library(MASS)
+library(wesanderson)
+```
+
+```{r}
+# Loading the data
+neuro_data <- read_csv("../clean_data/clean_neuro_data.csv")
+cbcl_data <- read_csv("../clean_data/clean_cbcl_data.csv")
+```
+
+```{r}
+# Building the same model with lavaanExtra
+####### Neurocognition #######
+neuroEx.0.mod <- write_lavaan(custom = '
+                 # Latent Variables
+                 ## Intercept Factor Loadings
+                  i =~ 1*t0 + 1*t2 + 1*t4
+                 # Regressors
+                  i ~ subject_sex
+                 # Variance the same
+                  t0 ~~ start(1) * theta*t0
+                  t2 ~~ theta*t2
+                  t4 ~~ theta*t4
+                ')
+## Linear Model w/ Free Covariance and No SES
+neuroEx.l.mod <- write_lavaan(custom = '
+                 # Latent Variables
+                 ## Intercept Factor Loadings
+                  i =~ 1*t0 + 1*t2 + 1*t4
+                 ## Linear Change Factor Loadings
+                  s =~ 0*t0 + 2*t2 + 4*t4
+                 # Regressors
+                  i ~ subject_sex
+                  s ~ subject_sex
+                 # Variance the same
+                  t0 ~~ start(1) * theta*t0
+                  t2 ~~ theta*t2
+                  t4 ~~ theta*t4
+                ')
+## Quadratic Model w/ Constrained Covariance and No SES
+neuroEx.q.mod <- write_lavaan(custom = '
+                 # Latent Variables
+                 ## Intercept Factor Loadings
+                  i =~ 1*t0 + 1*t2 + 1*t4
+                 ## Linear Change Factor Loadings
+                  s =~ 0*t0 + 2*t2 + 4*t4
+                 ## Quadratic Change Factor Loadings
+                  q =~ 0*t0 + 4*t2 + 16*t4
+                 # Regressors
+                  i ~ subject_sex
+                  s ~ subject_sex
+                  q ~ subject_sex
+                 # Variance the same
+                  t0 ~~ start(1) * theta*t0
+                  t2 ~~ theta*t2
+                  t4 ~~ theta*t4
+                 # Latent Variances
+                  i ~~ i
+                  s ~~ s
+                  q ~~ q
+                 # Latent Covariances
+                  i ~~ 0*s
+                  s ~~ 0*q
+                  q ~~ 0*i
+                ')
+####### Behavior #######
+behavEx.0.mod <- write_lavaan(custom = '
+                 # Latent Variables
+                 ## Intercept Factor Loadings
+                  i =~ 1*t0 + 1*t1 + 1*t2 + 1*t3 + 1*t4
+                 # Regressors
+                  i ~ subject_sex
+                 # Variance the same
+                  t0 ~~ start(1) * theta*t0
+                  t1 ~~ theta*t1
+                  t2 ~~ theta*t2
+                  t3 ~~ theta*t3
+                  t4 ~~ theta*t4
+                ')
+## Linear Model w/ Free Covariance and No SES
+behavEx.l.mod <- write_lavaan(custom = '
+                 # Latent Variables
+                 ## Intercept Factor Loadings
+                  i =~ 1*t0 + 1*t1 + 1*t2 + 1*t3 + 1*t4
+                 ## Linear Change Factor Loadings
+                  s =~ 0*t0 + 1*t1 + 2*t2 + 3*t3 + 4*t4
+                 # Regressors
+                  i ~ subject_sex
+                  s ~ subject_sex
+                 # Variance the same
+                  t0 ~~ start(1) * theta*t0
+                  t1 ~~ theta*t1
+                  t2 ~~ theta*t2
+                  t3 ~~ theta*t3
+                  t4 ~~ theta*t4
+                ')
+## Quadratic Model w/ Free Covariance and No SES
+behavEx.q.mod <- write_lavaan(custom = '
+                 # Latent Variables
+                 ## Intercept Factor Loadings
+                  i =~ 1*t0 + 1*t1 + 1*t2 + 1*t3 + 1*t4
+                 ## Linear Change Factor Loadings
+                  s =~ 0*t0 + 1*t1 + 2*t2 + 3*t3 + 4*t4
+                 ## Quadratic Change Facgor Loadings
+                  q =~ 0*t0 + 1*t1 + 4*t2 + 9*t3 + 16*t4
+                 # Regressors
+                  i ~ subject_sex
+                  s ~ subject_sex
+                  q ~ subject_sex
+                 # Variance the same
+                  t0 ~~ start(1) * theta*t0
+                  t1 ~~ theta*t1
+                  t2 ~~ theta*t2
+                  t3 ~~ theta*t3
+                  t4 ~~ theta*t4
+                ')
+```
+
+```{r}
+var_names <- c("Picture-Vocabulary","Flanker ICA","Pattern Comparison",
+                                        "Picture Sequence","Reading Recognition","Anxiety/Depression",
+                                        "Withdrawal/Depression","Somatic","Social","Thought","Attention",
+                                        "Rule-Breaker","Aggressive","Internalizing","Externalizing",
+                                        "Total Problems","Depression (DSM5)","Anxiety (DSM5)",
+                                        "Somatic Problems (DSM5)","ADHD (DSM5)","Opposition (DSM5)",
+                                        "Conduct (DSM5)","Sluggish Cognitive Tempo","OCD","Stress")
+all_data <- list()
+for (i in 1:25) {
+    if (i %in% 1:5) {
+    all_data[[i]] <- neuro_data[,c(1:3,7+i)] %>%
+          mutate(subject_sex = ifelse(subject_sex == "Female",0,1)) %>%
+          pivot_wider(names_from = year,
+                      values_from = last_col()) %>%
+          rename_with(~ paste0("t",.x),starts_with(c("0","1","2","3","4"))) %>%
+          left_join(neuro_data[c(!is.na(neuro_data$rel_family_id)),c(1,6:7)],by="src_subject_id")
+    } else {
+    all_data[[i]] <- cbcl_data[,c(1:3,2+i)] %>% 
+          mutate(subject_sex = ifelse(subject_sex == "Female",0,1)) %>%
+          pivot_wider(names_from = year,
+                      values_from = last_col()) %>%
+          rename_with(~ paste0("t",.x),starts_with(c("0","1","2","3","4"))) %>%
+          left_join(cbcl_data[c(!is.na(cbcl_data$rel_family_id)),c(1,6:7)],by="src_subject_id")
+    }
+    names(all_data)[i] <- var_names[i]
+}
+mod.compare <- data.frame()
+for (i in 1:length(all_data)) {
+    if (i %in% 1:5) {
+    mod.compare <- rbind(mod.compare,
+                         t(sapply(list(growth(neuroEx.0.mod,all_data[[i]],missing="ML"),
+                            growth(neuroEx.l.mod,all_data[[i]],missing="ML"),
+                            growth(neuroEx.q.mod,all_data[[i]],missing="ML")),
+                            fitMeasures, 
+                            fit.measures = c("ntotal","npar","logl","aic","bic","cfi","rmsea"))))
+    } else {
+    mod.compare <- rbind(mod.compare,
+                         t(sapply(list(growth(behavEx.0.mod,all_data[[i]],missing="ML"),
+                            growth(behavEx.l.mod,all_data[[i]],missing="ML"),
+                            growth(behavEx.q.mod,all_data[[i]],missing="ML")),
+                            fitMeasures, 
+                            fit.measures = c("ntotal","npar","logl","aic","bic","cfi","rmsea"))))
+    }
+}
+
+mod.compare <- cbind(data.frame(
+                            Data =
+                              c(rep("Neurocognition",15),
+                                rep("Behavior",60)),
+                            Variable = 
+                              rep(c("Picture-Vocabulary","Flanker ICA","Pattern Comparison",
+                                        "Picture Sequence","Reading Recognition","Anxiety/Depression",
+                                        "Withdrawal/Depression","Somatic","Social","Thought","Attention",
+                                        "Rule-Breaker","Aggressive","Internalizing","Externalizing",
+                                        "Total Problems","Depression (DSM5)","Anxiety (DSM5)",
+                                        "Somatic Problems (DSM5)","ADHD (DSM5)","Opposition (DSM5)",
+                                        "Conduct (DSM5)","Sluggish Cognitive Tempo","OCD","Stress"),
+                                      each=3),
+                            Model =
+                              rep(c("Null Model","Linear Model","Quadratic Model"),25)),
+                     mod.compare) %>%
+               mutate(LRT.DF = ifelse(Variable == lag(Variable),
+                                      npar - lag(npar),NA),
+                      LRT.stat = ifelse(Variable == lag(Variable),
+                                        -2*(lag(logl) - logl),NA),
+                      LRT.pvalue = 1-pchisq(LRT.stat,LRT.DF)) %>% 
+               relocate(c(LRT.DF,LRT.stat,LRT.pvalue),.after = logl)
+model_select <- mod.compare %>%
+                filter() %>%
+                group_by(Variable) %>%
+                summarise(max.LRT = max(LRT.stat,na.rm=T),
+                                 max.cfi = max(cfi),
+                                 min.aic = min(aic),
+                                 min.bic = min(bic),
+                                 min.rmsea = min(rmsea)) %>%
+                left_join(mod.compare,by="Variable") %>%
+                relocate(contains(c("max","min")),.after=rmsea) %>%
+                mutate(warning = ifelse(Variable %in% c("Picture-Vocabulary","Picture Sequence",
+                                                      "Reading Recognition","Flanker ICA")
+                                        & Model == "Quadratic Model",
+                                        "Negative Variance Measure",NA),
+                       is.LRT.max = ifelse(is.na(LRT.stat),0,
+                                           ifelse(LRT.stat == max.LRT,1,0)),
+                       is.cfi.max = ifelse(cfi == max.cfi,1,0),
+                       is.aic.min = ifelse(aic == min.aic,1,0),
+                       is.bic.min = ifelse(bic == min.bic,1,0),
+                       is.rmsea.min = ifelse(rmsea == min.rmsea,1,0),
+                       pick = ifelse(!is.na(warning),-1,
+                                     is.LRT.max + is.cfi.max + is.aic.min + is.bic.min + is.rmsea.min)) %>%
+                group_by(Variable) %>%
+                slice(which.max(pick)) %>%
+                dplyr::select(!(contains(c("min","max")))) %>%
+                ungroup()
+mod_est <- list()
+preds <- list()
+for (i in 1:length(unique(model_select$Variable))) {
+    var <- model_select[model_select$Variable == mod.compare[2*i-1,2],]
+    if (var$Data == "Neurocognition" & var$Model == "Linear Model") {
+        mod_est[[i]] <- parameterEstimates(growth(neuroEx.l.mod,all_data[[i]],missing="ML"))
+        preds[[i]] <- predict(growth(neuroEx.l.mod,all_data[[i]],missing="ML"))
+    } else if (var$Data == "Neurocognition" & var$Model == "Quadratic Model") {
+        mod_est[[i]] <- parameterEstimates(growth(neuroEx.q.mod,all_data[[i]],missing="ML"))
+        preds[[i]] <- predict(growth(neuroEx.q.mod,all_data[[i]],missing="ML"))
+    } else if (var$Data == "Behavior" & var$Model == "Linear Model") {
+        mod_est[[i]] <- parameterEstimates(growth(behavEx.l.mod,all_data[[i]],missing="ML"))
+        preds[[i]] <- predict(growth(neuroEx.l.mod,all_data[[i]],missing="ML"))
+    } else if (var$Data == "Behavior" & var$Model == "Quadratic Model") {
+        mod_est[[i]] <- parameterEstimates(growth(behavEx.q.mod,all_data[[i]],missing="ML"))
+        preds[[i]] <- predict(growth(behavEx.q.mod,all_data[[i]],missing="ML"))
+    } else {mod_est[[i]] <- NULL}
+    if (i %in% 1:5) {
+        preds[[i]] <- cbind(all_data[[i]][,c(1:2,6:7)],preds[[i]])
+    } else {
+        preds[[i]] <- cbind(all_data[[i]][,c(1:2,8:9)],preds[[i]])
+    }
+    names(mod_est)[i] <- paste(var$Variable,var$Model,sep=",")
+    names(preds)[i] <- paste(var$Variable,var$Model,sep=",")
+}
+```
+
+```{r}
+mod_int <- list()
+for (i in 1:length(mod_est)) {
+     mod_int[[i]] <- mod_est[[i]] %>%
+                     filter(op %in% c("~","~~","~1") & !(lhs %in% c("t0","t1","t2","t3","t4")))
+     names(mod_int)[i] <- names(mod_est)[i]
+}
+```
+
+```{r}
+mod_plot <- list()
+plots <- list()
+for (i in 1:length(mod_int)) {
+  if (i %in% 1:5 & gsub("(.*),(.*)","\\2",names(mod_int)[i]) == "Linear Model") {
+      mod_plot[[i]] <- preds[[i]] %>%
+                       dplyr::select(src_subject_id,subject_sex,i,s) %>%
+                       mutate(`0` = i,
+                              `2` = i + 2*s,
+                              `4` = i + 4*s) %>%
+                       pivot_longer(cols = contains(c("0","1","2","3","4")),
+                                    names_to = "year",values_to = "var") %>%
+                       mutate(year = as.numeric(year),
+                              subject_sex = factor(subject_sex, labels = c("Female","Male")))
+      plots[[i]] <- ggplot(mod_plot[[i]]) + 
+                    geom_smooth(aes(x = year, y = var, color = subject_sex, fill = subject_sex),
+                                formula = y ~ poly(x,1),method=lm,se=T) +
+                    labs(title=gsub("(.*),(.*)","\\1",names(mod_int)[i]),x="Year",y="Score",
+                         color="Sex",fill="Sex") +
+                    scale_color_manual(values = c("Female" = "#AA0000","Male" = "#0000AA")) +
+                    scale_fill_manual(values = c("Female" = "#AA0000","Male" = "#0000AA")) +
+                    theme(text = element_text(size=5),
+                          plot.margin = unit(c(0,0,0,0),"lines"))
+  } else if (i %in% 1:5 & gsub("(.*),(.*)","\\2",names(mod_int)[i]) == "Quadratic Model") {
+      mod_plot[[i]] <- preds[[i]] %>%
+                       dplyr::select(src_subject_id,subject_sex,i,s,q) %>%
+                       mutate(`0` = i,
+                              `2` = i + 2*s + 4*q,
+                              `4` = i + 4*s + 16*q) %>%
+                       pivot_longer(cols = contains(c("0","1","2","3","4")),
+                                    names_to = "year",values_to = "var") %>%
+                       mutate(year = as.numeric(year),
+                              subject_sex = factor(subject_sex, labels = c("Female","Male")))
+      plots[[i]] <- ggplot(mod_plot[[i]]) + 
+                    geom_smooth(aes(x = year, y = var, color = subject_sex, fill = subject_sex),
+                                formula = y ~ poly(x,2),method=lm,se=T) +
+                    labs(title=gsub("(.*),(.*)","\\1",names(mod_int)[i]),x="Year",y="Score",
+                         color="Sex",fill="Sex") +
+                    scale_color_manual(values = c("Female" = "#AA0000","Male" = "#0000AA")) +
+                    scale_fill_manual(values = c("Female" = "#AA0000","Male" = "#0000AA")) +
+                    theme(text = element_text(size=5),
+                          plot.margin = unit(c(0,0,0,0),"lines"))
+  } else if (i %in% 6:length(preds) & gsub("(.*),(.*)","\\2",names(mod_int)[i]) == "Linear Model") {
+      mod_plot[[i]] <- preds[[i]] %>%
+                       dplyr::select(src_subject_id,subject_sex,i,s) %>%
+                       mutate(`0` = i,
+                              `1` = i + s,
+                              `2` = i + 2*s,
+                              `3` = i + 3*s,
+                              `4` = i + 4*s) %>%
+                       pivot_longer(cols = contains(c("0","1","2","3","4")),
+                                    names_to = "year",values_to = "var") %>%
+                       mutate(year = as.numeric(year),
+                              subject_sex = factor(subject_sex, labels = c("Female","Male")))
+      plots[[i]] <- ggplot(mod_plot[[i]]) + 
+                    geom_smooth(aes(x = year, y = var, color = subject_sex, fill = subject_sex),
+                                formula = y ~ poly(x,1),method=lm,se=T) +
+                    labs(title=gsub("(.*),(.*)","\\1",names(mod_int)[i]),x="Year",y="Score",
+                         color="Sex",fill="Sex") +
+                    scale_color_manual(values = c("Female" = "#AA0000","Male" = "#0000AA")) +
+                    scale_fill_manual(values = c("Female" = "#AA0000","Male" = "#0000AA")) +
+                    theme(text = element_text(size=5),
+                          plot.margin = unit(c(0,0,0,0),"lines"))
+  } else if (i %in% 6:length(preds) & gsub("(.*),(.*)","\\2",names(mod_int)[i]) == "Quadratic Model") {
+      mod_plot[[i]] <- preds[[i]] %>%
+                       dplyr::select(src_subject_id,subject_sex,i,s,q) %>%
+                       mutate(`0` = i,
+                              `1` = i + s + q,
+                              `2` = i + 2*s + 4*q,
+                              `3` = i + 3*s + 9*q,
+                              `4` = i + 4*s + 16*q) %>%
+                       pivot_longer(cols = contains(c("0","1","2","3","4")),
+                                    names_to = "year",values_to = "var") %>%
+                       mutate(year = as.numeric(year),
+                              subject_sex = factor(subject_sex, labels = c("Female","Male")))
+      plots[[i]] <- ggplot(mod_plot[[i]]) + 
+                    geom_smooth(aes(x = year, y = var, color = subject_sex, fill = subject_sex),
+                                formula = y ~ poly(x,2),method=lm,se=T) +
+                    labs(title=gsub("(.*),(.*)","\\1",names(mod_int)[i]),x="Year",y="Score",
+                         color="Sex",fill="Sex") +
+                    scale_color_manual(values = c("Female" = "#AA0000","Male" = "#0000AA")) +
+                    scale_fill_manual(values = c("Female" = "#AA0000","Male" = "#0000AA")) +
+                    theme(text = element_text(size=5),
+                          plot.margin = unit(c(0,0,0,0),"lines"))
+  }
+  names(plots)[i] <- names(preds)[i]
+}
+```
+
+```{r}
+for (i in 1:25) {
+      a <- mod_int[[i]] %>%
+               filter(lhs %in% c("i","s","q") & op %in% c("~1","~")) %>%
+               mutate(Model = names(mod_int)[i]) %>%
+               relocate(Model, .before = lhs)
+  if (i == 1) {
+    fin_tab <- a
+  } else {
+    fin_tab <- rbind(fin_tab,a)
+  }
+}
+fin_tab <- fin_tab %>%
+           mutate(Parameter = ifelse(lhs == "i" & op == "~1",
+                                     "Intercept - Baseline",
+                              ifelse(lhs == "i" & op == "~",
+                                     "Intercept - Sex Effect",
+                              ifelse(lhs == "s" & op == "~1",
+                                     "1st-Order Slope - Baseline",
+                              ifelse(lhs == "s" & op == "~",
+                                     "1st-Order Slope - Sex Effect",
+                              ifelse(lhs == "q" & op == "~1",
+                                     "2nd-Order Slope - Baseline",
+                              ifelse(lhs == "q" & op == "~",
+                                     "2nd-Order SLope - Sex Effect",
+                                     NA))))))) %>%
+            dplyr::select(Model,Parameter,est,se,z,pvalue)
+```
+
+```{r}
+ggpubr::annotate_figure(ggpubr::ggarrange(plotlist = plots,
+                                          ncol=5, nrow=5,common.legend=T,
+                                          align = "hv",
+                                          hjust=-0.5,vjust=0))
+ggsave("../3 Analysis/Model Plots.pdf")
+```
+
+```{r}
+write_csv(fin_tab,"../3 Analysis/Final_Model_Estimates.csv")
+write_csv(mod.compare,"../3 Analysis/Model_Comparisons.csv")
+saveRDS(preds,"../1 Data/clean_data/Model_Predictions.RData")
+saveRDS(all_data,"../1 Data/clean_data/Subject_Ordered_Data.RData")
+```

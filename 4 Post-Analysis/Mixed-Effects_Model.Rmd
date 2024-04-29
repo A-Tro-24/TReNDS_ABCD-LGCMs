@@ -1,0 +1,133 @@
+---
+title: "Model Building Framework for ABCD Data (Part 2)"
+author: "Aidan H. Troha"
+date: Sys.date()
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(lme4)
+library(lmerTest)
+library(tidymodels)
+library(multilevelmod)
+```
+
+```{r}
+preds <- readRDS("../1 Data/clean_data/Model_Predictions.RData")
+data <- readRDS("../1 Data/clean_data/Subject_Ordered_Data.RData")
+
+ses <- read_csv("../1 Data/raw_data/latentfac.csv") %>%
+             dplyr::select(!(...1))
+
+adi <- read_csv("../1 Data/raw_data/adi.csv") %>%
+       dplyr::select(!(...1))
+
+svi <- read_csv("../1 Data/raw_data/svi.csv") %>%
+       dplyr::select(!(...1))
+
+coi <- read_csv("../1 Data/raw_data/coi.csv") %>%
+       dplyr::select(!(...1))
+
+for (i in 1:length(preds)) {
+    preds[[i]] <- preds[[i]] %>%
+                  left_join(ses[,c(1,3)],by="src_subject_id") %>%
+                  left_join(coi[,c(1,3)],by="src_subject_id") %>%
+                  left_join(adi[,c(1,3)],by="src_subject_id") %>%
+                  left_join(svi[,c(1,3)],by="src_subject_id") %>%
+                  drop_na()
+}
+```
+
+```{r}
+# Setting the Model Workflow
+summary(lmer(i ~ subject_sex + latent_factor_ss_general_ses + reshist_addr1_coi_r_coi_nat + 
+                reshist_addr1_adi_wsum + reshist_addr1_svi_tot_20142018 + 
+                (1|site_id_l) + (1|rel_family_id),
+             preds[[6]]))
+summary(lmer(s ~ subject_sex + latent_factor_ss_general_ses + reshist_addr1_coi_r_coi_nat + 
+                reshist_addr1_adi_wsum + reshist_addr1_svi_tot_20142018 + 
+                (1|site_id_l) + (1|rel_family_id),
+             preds[[1]]))
+summary(lmer(s ~ subject_sex + latent_factor_ss_general_ses + reshist_addr1_coi_r_coi_nat + 
+                reshist_addr1_adi_wsum + reshist_addr1_svi_tot_20142018 + 
+                (1|site_id_l) + (1|rel_family_id),
+             preds[[1]]))
+```
+
+```{r}
+fit_compare <- list()
+for (i in 1:length(data)) {
+    if (gsub("(.*),(.*)","\\2",names(mod_int)[i]) == "Linear Model") {
+        fit_compare[[i]] <- lapply(list(lmer(i ~ subject_sex + latent_factor_ss_general_ses +
+                                                 reshist_addr1_adi_wsum +
+                                                 reshist_addr1_coi_r_coi_nat + 
+                                                 reshist_addr1_svi_tot_20142018 +
+                                                 (1|site_id_l) + (1|rel_family_id),
+                                             preds[[i]]),
+                                        lmer(s ~ subject_sex + latent_factor_ss_general_ses +
+                                                 reshist_addr1_adi_wsum +
+                                                 reshist_addr1_coi_r_coi_nat + 
+                                                 reshist_addr1_svi_tot_20142018 +
+                                                 (1|site_id_l) + (1|rel_family_id),
+                                             preds[[i]])),step)
+        names(fit_compare[[i]]) <- c("Intercept","1st Order Slope")
+    } else if (gsub("(.*),(.*)","\\2",names(mod_int)[i]) == "Quadratic Model") {
+        fit_compare[[i]] <- lapply(list(lmer(i ~ subject_sex + latent_factor_ss_general_ses +
+                                                 reshist_addr1_adi_wsum +
+                                                 reshist_addr1_coi_r_coi_nat + 
+                                                 reshist_addr1_svi_tot_20142018 +
+                                                 (1|site_id_l) + (1|rel_family_id),
+                                             preds[[i]]),
+                                        lmer(s ~ subject_sex + latent_factor_ss_general_ses +
+                                                 reshist_addr1_adi_wsum +
+                                                 reshist_addr1_coi_r_coi_nat + 
+                                                 reshist_addr1_svi_tot_20142018 +
+                                                 (1|site_id_l) + (1|rel_family_id),
+                                             preds[[i]]),
+                                        lmer(q ~ subject_sex + latent_factor_ss_general_ses +
+                                                 reshist_addr1_adi_wsum +
+                                                 reshist_addr1_coi_r_coi_nat + 
+                                                 reshist_addr1_svi_tot_20142018 +
+                                                 (1|site_id_l) + (1|rel_family_id),
+                                             preds[[i]])),step)
+        names(fit_compare[[i]]) <- c("Intercept","1st Order Slope","2nd Order Slope")
+    }
+    names(fit_compare)[i] <- names(data)[i]
+}
+fit_pars <- list()
+pars <- list()
+for (i in 1:length(fit_compare)) {
+    if (length(fit_compare[[i]]) == 2) {
+        for (j in 1:2) {pars[[j]] <- list(
+random = rownames(fit_compare[[i]][[j]][[1]][fit_compare[[i]][[j]][[1]]$Eliminated == 0,]),
+fixed = rownames(fit_compare[[i]][[j]][[2]][fit_compare[[j]][[j]][[2]]$Eliminated == 0,]))
+        }
+names(pars) <- c("Intercept","1st Order Slope")
+    } else if (length(fit_compare[[i]]) == 3) {
+        for (j in 1:3) {pars[[j]] <- list(
+random = rownames(fit_compare[[i]][[j]][[1]][fit_compare[[i]][[j]][[1]]$Eliminated == 0,]),
+fixed = rownames(fit_compare[[i]][[j]][[2]][fit_compare[[j]][[j]][[2]]$Eliminated == 0,]))
+        }
+names(pars) <- c("Intercept","1st Order Slope","2nd Order Slope")
+    } else (NULL)
+fit_pars[[i]] <- pars
+names(fit_pars)[i] <- names(fit_compare)[i]
+}
+```
+
+```{r}
+fixef(all_i)
+fixef(a)
+sqrt(diag(vcov(a)))
+VarCorr(a)
+vcov(a) / (sqrt(diag(vcov(a))) %*% t(sqrt(diag(vcov(a)))))
+extractAIC(a)
+REMLcrit(a)
+residuals(a)
+fitted(a)
+anova(a)
+b <- preds[[1]] %>% drop_na() %>% dplyr::select(s) %>% cbind(fit = fitted(a), res = residuals(a))
+plot(b$s,b$fit)
+plot(b$fit,b$res)
+```

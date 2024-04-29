@@ -1,0 +1,780 @@
+---
+title: "Data Exploration for ABCD Data"
+author: "Aidan H. Troha"
+date: Sys.date()
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(visdat)
+library(ggplot2)
+library(ggpubr)
+library(EnvStats)
+library(mgcv)
+```
+
+```{r}
+# Importing the data from .csv files
+neuro_data <- read_csv("../clean_data/clean_neuro_data.csv") 
+cbcl_data <- read_csv("../clean_data/clean_cbcl_data.csv")
+```
+
+```{r}
+# To view the missing data, excluding the index, subject identifier, and event identifier variables
+neuro_data %>%
+         group_by(year) %>%
+         dplyr::select(contains("uncorrected"),year) %>%
+         vis_miss(facet = year)
+
+cbcl_data %>%
+         group_by(year) %>%
+         dplyr::select(starts_with("cbcl"),year) %>%
+         vis_miss(facet = year,warn_large_data = F)
+```
+
+```{r}
+# Exploratory Data Visualizations: BUILDING PLOT STRUCTURE
+## Iterative process of establishing a generic plot structure
+plot_names <- c()
+plot_data <- list()
+for (i in 1:25) {
+    if (i %in% 1:5) {
+        plot_names[i] <- names(neuro_data[,7+i])
+        plot_data[[i]] <- neuro_data[,c(2,7+i,3)]
+        colnames(plot_data[[i]])[2] <- "var"
+    } else {
+        plot_names[i] <- names(cbcl_data[,2+i])
+        plot_data[[i]] <- cbcl_data[,c(2,2+i,3)]
+        colnames(plot_data[[i]])[2] <- "var"
+    }
+    names(plot_data)[[i]] <- plot_names[i]
+}
+```
+
+```{r}
+# Exploratory Data Visualizations: BOXPLOT
+## Plots all boxplots into a single-plot view for all uncorrected measures and saves to a pdf
+annotate_figure(ggpubr::ggarrange(for (i in 1:25) {
+                                      ggplot(data=plot_data[[i]],aes(x=as.factor(year),
+                                                                     y=var)) +
+                                      geom_violin(aes(color=subject_sex,
+                                                      fill=subject_sex)) +
+                                  },
+                                  labels = c("A","B","C","D","E","F","G","H","I","J"),
+                                  ncol = 5, nrow = 5, align = "hv"),
+                bottom = text_grob(label="Year",size = 7))
+
+  neurocogplot + geom_boxplot(aes(x=as.factor(year),y=nihtbx_picvocab_uncorrected)) +
+                         stat_n_text(aes(x=as.factor(year),y=nihtbx_picvocab_uncorrected),
+                                     na.rm=T,size = 2,angle=45) +
+                         ylab("Picture Vocabulary \n Test Score"),
+          neurocogplot + geom_boxplot(aes(x=as.factor(year),y=nihtbx_flanker_uncorrected)) +
+                         stat_n_text(aes(x=as.factor(year),y=nihtbx_flanker_uncorrected),
+                                     na.rm=T,size = 2,angle=45) +
+                         ylab("Flanker inhibitory \n Control & Attention Test Score"),
+          neurocogplot + geom_boxplot(aes(x=as.factor(year),y=nihtbx_pattern_uncorrected)) +
+                         stat_n_text(aes(x=as.factor(year),y=nihtbx_pattern_uncorrected),
+                                     na.rm=T,size = 2,angle=45) +
+                         ylab("Pattern Comparison \n Processing Speed Test Score"),
+          neurocogplot + geom_boxplot(aes(x=as.factor(year),y=nihtbx_picture_uncorrected)) +
+                         stat_n_text(aes(x=as.factor(year),y=nihtbx_picture_uncorrected),
+                                     na.rm=T,size = 2,angle=45) +
+                         ylab("Picture Sequence \n Memory Test Score"),
+          neurocogplot + geom_boxplot(aes(x=as.factor(year),y=nihtbx_reading_uncorrected)) +
+                         stat_n_text(aes(x=as.factor(year),y=nihtbx_reading_uncorrected),
+                                     na.rm=T,size = 2,angle=45) +
+                         ylab("Oral Reading \n Recognition Test Score"),
+### Potential for publication
+          labels = c("A","B","C","D","E","F","G","H","I","J"),
+          ncol = 5, nrow = 5, align = "hv"),
+bottom = text_grob(label="Year",size = 7))
+```
+
+```{r}
+# Exploratory Data Visualizations: TIME SERIES (LM)- NEUROCOGNITION
+## Plots all mean-linear plots into a single-plot view for all uncorrected measures and saves to a pdf
+pdf(file = "../figures/Neurocognition vs time (D1).pdf",
+    width = 8,
+    height = 2)
+annotate_figure(
+ggarrange(neurocogplot + geom_smooth(aes(x=year,y=nihtbx_picvocab_uncorrected,
+                                         color=subject_sex,fill=subject_sex),
+                                         formula=y~x,method=lm) +
+                         geom_point(aes(x=year,y=nihtbx_picvocab_uncorrected_mean,color=subject_sex),
+                                    position=position_dodge(width=.2)) +
+                         geom_errorbar(aes(x=year,y=nihtbx_picvocab_uncorrected_mean,xmin=0,xmax=4,
+                               ymin=nihtbx_picvocab_uncorrected_mean - nihtbx_picvocab_uncorrected_sd,
+                               ymax=nihtbx_picvocab_uncorrected_mean + nihtbx_picvocab_uncorrected_sd,
+                               color=subject_sex),width=.1,position=position_dodge(width=.2),
+                               show.legend=F) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Picture Vocabulary \n Test Score") +
+                         labs(color = "Sex",fill = "Sex"),
+          neurocogplot + geom_smooth(aes(x=year,y=nihtbx_flanker_uncorrected,color=subject_sex),
+                                     formula=y~x,method=lm) +
+                         geom_point(aes(x=year,y=nihtbx_flanker_uncorrected_mean,color=subject_sex),
+                                    position=position_dodge(width=.2)) +
+                         geom_errorbar(aes(x=year,y=nihtbx_flanker_uncorrected_mean,xmin=0,xmax=4,
+                               ymin=nihtbx_flanker_uncorrected_mean - nihtbx_flanker_uncorrected_sd,
+                               ymax=nihtbx_flanker_uncorrected_mean + nihtbx_flanker_uncorrected_sd,
+                               color=subject_sex),width=.1,position=position_dodge(width=.2),
+                               show.legend=F) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Flanker inhibitory \n Control & Attention Test Score"),
+          neurocogplot + geom_smooth(aes(x=year,y=nihtbx_pattern_uncorrected,color=subject_sex),
+                                     formula=y~x,method=lm) +
+                         geom_point(aes(x=year,y=nihtbx_pattern_uncorrected_mean,color=subject_sex),
+                                    position=position_dodge(width=.2)) +
+                         geom_errorbar(aes(x=year,y=nihtbx_pattern_uncorrected_mean,xmin=0,xmax=4,
+                               ymin=nihtbx_pattern_uncorrected_mean - nihtbx_pattern_uncorrected_sd,
+                               ymax=nihtbx_pattern_uncorrected_mean + nihtbx_pattern_uncorrected_sd,
+                               color=subject_sex),width=.1,position=position_dodge(width=.2),
+                               show.legend=F) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Pattern Comparison \n Processing Speed Test Score"),
+          neurocogplot + geom_smooth(aes(x=year,y=nihtbx_picture_uncorrected,color=subject_sex),
+                                     formula=y~x,method=lm) +
+                         geom_point(aes(x=year,y=nihtbx_picture_uncorrected_mean,color=subject_sex),
+                                    position=position_dodge(width=.2)) +
+                         geom_errorbar(aes(x=year,y=nihtbx_picture_uncorrected_mean,xmin=0,xmax=4,
+                               ymin=nihtbx_picture_uncorrected_mean - nihtbx_picture_uncorrected_sd,
+                               ymax=nihtbx_picture_uncorrected_mean + nihtbx_picture_uncorrected_sd,
+                               color=subject_sex),width=.1,position=position_dodge(width=.2),
+                               show.legend=F) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Picture Sequence \n Memory Test Score"),
+          neurocogplot + geom_smooth(aes(x=year,y=nihtbx_reading_uncorrected,color=subject_sex),
+                                     formula=y~x,method=lm) +
+                         geom_point(aes(x=year,y=nihtbx_reading_uncorrected_mean,color=subject_sex),
+                                    position=position_dodge(width=.2)) +
+                         geom_errorbar(aes(x=year,y=nihtbx_reading_uncorrected_mean,xmin=0,xmax=4,
+                               ymin=nihtbx_reading_uncorrected_mean - nihtbx_reading_uncorrected_sd,
+                               ymax=nihtbx_reading_uncorrected_mean + nihtbx_reading_uncorrected_sd,
+                               color=subject_sex),width=.1,position=position_dodge(width=.2),
+                               show.legend=F) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Oral Reading \n Recognition Test Score"),
+          ncol = 5, nrow = 1,common.legend = T,legend = "top", align = "v"),
+bottom = text_grob(label="Year",size = 7))
+dev.off()
+```
+
+```{r}
+# Exploratory Data Visualizations: TIME SERIES (QM)- NEUROCOGNITION
+# Plots all mean-quadratic curves into a single-plot view for all uncorrected measures and saves to a pdf
+pdf(file = "../figures/Neurocognition vs time (D2).pdf",
+    width = 8,
+    height = 2)
+annotate_figure(
+ggarrange(neurocogplot + stat_smooth(aes(x=year,y=nihtbx_picvocab_uncorrected,color=subject_sex),
+                                     formula = y~poly(x,2),method=lm) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Picture Vocabulary \n Test Score") +
+                         labs(color = "Sex"),
+          neurocogplot + stat_smooth(aes(x=year,y=nihtbx_flanker_uncorrected,color=subject_sex),
+                                     formula = y~poly(x,2),method=lm) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Flanker inhibitory \n Control & Attention Test Score"),
+          neurocogplot + stat_smooth(aes(x=year,y=nihtbx_pattern_uncorrected,color=subject_sex),
+                                     formula = y~poly(x,2),method=lm) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Pattern Comparison \n Processing Speed Test Score"),
+          neurocogplot + stat_smooth(aes(x=year,y=nihtbx_picture_uncorrected,color=subject_sex),
+                                     formula = y~poly(x,2),method=lm) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Picture Sequence \n Memory Test Score"),
+          neurocogplot + stat_smooth(aes(x=year,y=nihtbx_reading_uncorrected,color=subject_sex),
+                                     formula = y~poly(x,2),method=lm) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Oral Reading \n Recognition Test Score"),
+### Potential for publication
+#   labels = c("A","B","C","D","E","F","G","H","I","J"),
+          ncol = 5, nrow = 1,common.legend = T,legend = "top", align = "v"),
+bottom = text_grob(label="Year",size = 7))
+dev.off()
+```
+
+```{r}
+# Exploratory Data Visualizations: TIME SERIES (GAM)- NEUROCOGNITION
+# Plots all mean-loess curves into a single-plot view for all uncorrected measures and saves to a pdf
+pdf(file = "../figures/Neurocognition vs time (GAM).pdf",
+    width = 8,
+    height = 2)
+annotate_figure(
+ggarrange(neurocogplot + geom_smooth(aes(x=year,y=nihtbx_picvocab_uncorrected,color=subject_sex), 
+                                     method="gam", formula=y~s(x, k=3, bs="cs")) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("PictureVocabulary \n Test Score") +
+                         labs(color = "Sex"),
+          neurocogplot + stat_smooth(aes(x=year,y=nihtbx_flanker_uncorrected,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=3, bs="cs")) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Flanker inhibitory \n Control & Attention Test Score"),
+          neurocogplot + stat_smooth(aes(x=year,y=nihtbx_pattern_uncorrected,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=3, bs="cs")) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Pattern Comparison \n Processing Speed Test Score"),
+          neurocogplot + stat_smooth(aes(x=year,y=nihtbx_picture_uncorrected,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=3, bs="cs")) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Picture Sequence \n Memory Test Score"),
+          neurocogplot + stat_smooth(aes(x=year,y=nihtbx_reading_uncorrected,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=3, bs="cs")) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Oral Reading \n Recognition Test Score"),
+### Potential for publication
+#   labels = c("A","B","C","D","E","F","G","H","I","J"),
+          ncol = 5, nrow = 1,common.legend = T,legend = "top", align = "v"),
+bottom = text_grob(label="Year",size = 7))
+dev.off()
+```
+
+```{r}
+# Exploratory Data Visualizations for CBCL data: BOXPLOT - CBCL
+## Plots all boxplots into a single-plot view for all raw scores and saves to a pdf
+pdf(file = "../figures/CBCL DE Boxes Raw.pdf",
+    width = 8,
+    height = 5)
+annotate_figure(
+ggarrange(cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_syn_anxdep_r)) +
+                     ylab("Anxiety & Depression \n Syndrome Score"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_syn_withdep_r)) +
+                     ylab("Withdrawn/Depressed \n Score"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_syn_somatic_r)) +
+                     ylab("Somatic Complaints \n Score"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_syn_social_r)) +
+                     ylab("Social Problems \n Score"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_syn_thought_r)) +
+                     ylab("Thought Problems \n Score"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_syn_attention_r)) +
+                     ylab("Attention Problems \n Score"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_syn_rulebreak_r)) +
+                     ylab("Rule-Breaking \n Behavior Score"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_syn_aggressive_r)) +
+                     ylab("Aggressive Behavior \n Score"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_syn_internal_r)) +
+                     ylab("Internalizing \n Behvaior Score"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_syn_external_r)) +
+                     ylab("Externalizing \n Behavior Score"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_syn_totprob_r)) +
+                     ylab("Total Problems \n Score"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_dsm5_depress_r)) +
+                     ylab("Depression DSM5 \n Scale"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_dsm5_anxdisord_r)) +
+                     ylab("Anxiety Dissorder \n DSM5 Scale"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_dsm5_somaticpr_r)) +
+                     ylab("Somatic Disorder \n DSM5 Scale"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_dsm5_adhd_r)) +
+                     ylab("ADHD DSM5 \n Scale"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_dsm5_opposit_r)) +
+                     ylab("ODD DSM5 \n Scale"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_dsm5_conduct_r)) +
+                     ylab("Conduct DSM5 \n Scale"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_07_sct_r)) +
+                     ylab("SCT Score"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_07_ocd_r)) +
+                     ylab("OCD Score"),
+          cbclplot + geom_boxplot(aes(x=as.factor(year),y=cbcl_scr_07_stress_r)) +
+                     ylab("Stress Score"),
+### Potential for publication
+#   labels =c("A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T"),
+          ncol = 5, nrow = 4, align="v"),
+bottom = text_grob(label="Year",size = 7))
+dev.off()
+```
+
+```{r}
+# Exploratory Data Visualizations for CBCL data: TIME SERIES (D1) - CBCL
+## Plots all mean-linear plots into a single-plot view for all raw scores
+pdf(file = "../figures/CBCL vs time(D1).pdf",
+    width = 8,
+    height = 5)
+annotate_figure(
+ggarrange(cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_anxdep_r,color=subject_sex,fill=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("Anxiety & Depression \n Syndrome Score") +
+                     labs(color = "Sex",fill="Sex"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_withdep_r,color=subject_sex,fill=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("Withdrawn/Depressed \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_somatic_r,color=subject_sex,fill=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("Somatic Complaints \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_social_r,color=subject_sex,fill=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("Social Problems \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_thought_r,color=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("Thought Problems \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_attention_r,color=subject_sex),
+                                 foprmula=y~x,method=lm) +
+                     ylab("Attention Problems \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_rulebreak_r,color=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("Rule-Breaking \n Behavior Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_aggressive_r,color=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("Aggressive Behavior \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_internal_r,color=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("Internalizing \n Behvaior Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_external_r,color=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("Externalizing \n Behavior Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_totprob_r,color=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("Total Problems \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_depress_r,color=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("Depression DSM5 \n Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_anxdisord_r,color=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("Anxiety Dissorder \n DSM5 Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_somaticpr_r,color=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("Somatic Disorder \n DSM5 Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_adhd_r,color=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("ADHD DSM5 \n Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_opposit_r,color=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("ODD DSM5 \n Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_conduct_r,color=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("Conduct DSM5 \n Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_07_sct_r,color=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("SCT Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_07_ocd_r,color=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("OCD Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_07_stress_r,color=subject_sex),
+                                 formula=y~x,method=lm) +
+                     ylab("Stress Score"),
+### Potential for publication
+#   labels = c("A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T"),
+          ncol = 5, nrow = 4, common.legend = T, legend = "top", align = "v"),
+bottom = text_grob(label = "Year",size = 7))
+dev.off()
+```
+
+```{r}
+# Exploratory Data Visualizations for CBCL data: TIME SERIES - CBCL
+## Plots all mean-quadratic curves into a single-plot view for all raw scores
+pdf(file = "../figures/CBCL vs time(D2).pdf",
+    width = 8,
+    height = 5)
+annotate_figure(
+ggarrange(cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_anxdep_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("Anxiety & Depression \n Syndrome Score") +
+                     labs(color = "Sex"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_withdep_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("Withdrawn/Depressed \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_somatic_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("Somatic Complaints \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_social_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("Social Problems \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_thought_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("Thought Problems \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_attention_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("Attention Problems \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_rulebreak_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("Rule-Breaking \n Behavior Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_aggressive_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("Aggressive Behavior \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_internal_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("Internalizing \n Behvaior Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_external_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("Externalizing \n Behavior Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_totprob_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("Total Problems \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_depress_r,color=subject_sex),
+                                formula = y~poly(x,2)) +
+                     ylab("Depression DSM5 \n Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_anxdisord_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("Anxiety Dissorder \n DSM5 Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_somaticpr_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("Somatic Disorder \n DSM5 Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_adhd_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("ADHD DSM5 \n Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_opposit_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("ODD DSM5 \n Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_conduct_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("Conduct DSM5 \n Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_07_sct_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("SCT Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_07_ocd_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("OCD Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_07_stress_r,color=subject_sex),
+                                 formula = y~poly(x,2)) +
+                     ylab("Stress Score"),
+### Potential for publication
+#   labels = c("A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T"),
+          ncol = 5, nrow = 4, common.legend = T, legend = "top", align = "v"),
+bottom = text_grob(label = "Year",size = 7))
+dev.off()
+```
+
+```{r}
+# Exploratory Data Visualizations for CBCL data: TIME SERIES - CBCL
+## Plots all mean-linear plots into a single-plot view for all raw scores
+pdf(file = "../figures/CBCL vs time(GAM).pdf",
+    width = 8,
+    height = 5)
+ggpubr::annotate_figure(
+ggpubr::ggarrange(cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_anxdep_r,
+                                             color=subject_sex,fill=subject_sex),
+                                         method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("Anxiety & Depression \n Syndrome Score") +
+                     labs(color = "Sex",fill="Sex"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_withdep_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("Withdrawn/Depressed \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_somatic_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("Somatic Complaints \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_social_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("Social Problems \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_thought_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("Thought Problems \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_attention_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("Attention Problems \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_rulebreak_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("Rule-Breaking \n Behavior Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_aggressive_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("Aggressive Behavior \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_internal_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("Internalizing \n Behvaior Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_external_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("Externalizing \n Behavior Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_totprob_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("Total Problems \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_depress_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("Depression DSM5 \n Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_anxdisord_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("Anxiety Dissorder \n DSM5 Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_somaticpr_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("Somatic Disorder \n DSM5 Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_adhd_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("ADHD DSM5 \n Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_opposit_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("ODD DSM5 \n Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_conduct_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("Conduct DSM5 \n Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_07_sct_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("SCT Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_07_ocd_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("OCD Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_07_stress_r,color=subject_sex),
+                                     method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     ylab("Stress Score"),
+### Potential for publication
+#   labels = c("A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T"),
+          ncol = 5, nrow = 4, common.legend = T, legend = "top", align = "v"),
+bottom = ggpubr::text_grob(label = "Year",size = 7))
+dev.off()
+```
+
+```{r}
+# Exploratory Data Visualizations for CBCL data: TIME SERIES - CBCL
+## Plots all mean-linear plots into a single-plot view for all raw scores
+pdf(file = "../figures/GAM (with errorbars).pdf",
+    width = 12,
+    height = 8)
+ggpubr::annotate_figure(
+ggpubr::ggarrange(
+          neurocogplot + geom_smooth(aes(x=year,y=nihtbx_picvocab_uncorrected,
+                                         color=subject_sex,fill=subject_sex),
+                                     method="gam", formula=y~s(x, k=3, bs="cs")) +
+                         geom_point(aes(x=year,y=nihtbx_picvocab_uncorrected_mean,
+                                        color=subject_sex),
+                                    position=position_dodge(width=.2)) +
+                         geom_errorbar(aes(x=year,y=nihtbx_picvocab_uncorrected_mean, xmin=0, xmax=4,
+                               ymin=picvocab_min, ymax=picvocab_max,color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Picture Vocabulary \n Test Score") +
+                         labs(color = "Sex",fill = "Sex"),
+          neurocogplot + stat_smooth(aes(x=year,y=nihtbx_flanker_uncorrected,
+                                         color=subject_sex,fill=subject_sex),
+                                     method="gam", formula=y~s(x, k=3, bs="cs")) +
+                         geom_point(aes(x=year,y=nihtbx_picvocab_uncorrected_mean,
+                                        color=subject_sex),
+                                    position=position_dodge(width=.2)) +
+                         geom_errorbar(aes(x=year,y=nihtbx_picvocab_uncorrected_mean,xmin=0,xmax=4,
+                               ymin=flanker_min, ymax=flanker_max,color=subject_sex), width=.1, 
+                               position=position_dodge(width=.2), show.legend=F) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Flanker inhibitory \n Control & Attention Test Score"),
+          neurocogplot + stat_smooth(aes(x=year,y=nihtbx_pattern_uncorrected,
+                                         color=subject_sex,fill=subject_sex),
+                                     method="gam", formula=y~s(x, k=3, bs="cs")) +
+                         geom_point(aes(x=year,y=nihtbx_pattern_uncorrected_mean,
+                                        color=subject_sex),
+                                    position=position_dodge(width=.2)) +
+                         geom_errorbar(aes(x=year,y=nihtbx_pattern_uncorrected_mean, xmin=0, xmax=4,
+                               ymin=pattern_min, ymax=pattern_max,color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Pattern Comparison \n Processing Speed Test Score"),
+          neurocogplot + stat_smooth(aes(x=year,y=nihtbx_picture_uncorrected,
+                                         color=subject_sex,fill=subject_sex),
+                                     method="gam", formula=y~s(x, k=3, bs="cs")) +
+                         geom_point(aes(x=year,y=nihtbx_picvocab_uncorrected_mean,
+                                        color=subject_sex),
+                                    position=position_dodge(width=.2)) +
+                         geom_errorbar(aes(x=year,y=nihtbx_picture_uncorrected_mean, xmin=0, xmax=4,
+                               ymin=picture_min, ymax=picture_max,color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Picture Sequence \n Memory Test Score"),
+          neurocogplot + stat_smooth(aes(x=year,y=nihtbx_reading_uncorrected,
+                                         color=subject_sex,fill=subject_sex),
+                                     method="gam", formula=y~s(x, k=3, bs="cs")) +
+                         geom_point(aes(x=year,y=nihtbx_reading_uncorrected_mean,
+                                        color=subject_sex),
+                                    position=position_dodge(width=.2)) +
+                         geom_errorbar(aes(x=year,y=nihtbx_reading_uncorrected_mean, xmin=0, xmax=4,
+                               ymin=reading_min, ymax=reading_max,color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                         scale_x_continuous(breaks = c(0,2,4)) +
+                         ylab("Oral Reading \n Recognition Test Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_anxdep_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_syn_anxdep_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_syn_anxdep_r_mean,xmin=0,xmax=4,
+                               ymin=anxdep_min, ymax=anxdep_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("Anxiety & Depression \n Syndrome Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_withdep_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_syn_withdep_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_syn_withdep_r_mean,xmin=0,xmax=4,
+                               ymin=withdep_min, ymax=withdep_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("Withdrawn/Depressed \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_somatic_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_syn_somatic_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_syn_somatic_r_mean,xmin=0,xmax=4,
+                               ymin=somatic_min, ymax=somatic_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("Somatic Complaints \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_social_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_syn_social_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_syn_social_r_mean,xmin=0,xmax=4,
+                               ymin=social_min, ymax=social_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("Social Problems \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_thought_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_syn_thought_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_syn_thought_r_mean,xmin=0,xmax=4,
+                               ymin=thought_min, ymax=thought_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("Thought Problems \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_attention_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_syn_attention_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_syn_attention_r_mean,xmin=0,xmax=4,
+                               ymin=attention_min, ymax=attention_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("Attention Problems \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_rulebreak_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_syn_rulebreak_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_syn_rulebreak_r_mean,xmin=0,xmax=4,
+                               ymin=rulebr_min, ymax=rulebr_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("Rule-Breaking \n Behavior Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_aggressive_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_syn_aggressive_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_syn_aggressive_r_mean,xmin=0,xmax=4,
+                               ymin=aggress_min, ymax=aggress_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("Aggressive Behavior \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_internal_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_syn_internal_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_syn_internal_r_mean,xmin=0,xmax=4,
+                               ymin=internal_min, ymax=internal_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("Internalizing \n Behvaior Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_external_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_syn_external_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_syn_external_r_mean,xmin=0,xmax=4,
+                               ymin=external_min, ymax=external_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("Externalizing \n Behavior Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_syn_totprob_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_syn_totprob_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_syn_totprob_r_mean,xmin=0,xmax=4,
+                               ymin=total_min, ymax=total_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("Total Problems \n Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_depress_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_dsm5_depress_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_dsm5_depress_r_mean,xmin=0,xmax=4,
+                               ymin=depress_min, ymax=depress_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("Depression DSM5 \n Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_anxdisord_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_dsm5_anxdisord_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_dsm5_anxdisord_r_mean,xmin=0,xmax=4,
+                               ymin=anxiety_min, ymax=anxiety_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("Anxiety Dissorder \n DSM5 Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_somaticpr_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_dsm5_somaticpr_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_dsm5_somaticpr_r_mean,xmin=0,xmax=4,
+                               ymin=somaticdis_min, ymax=somaticdis_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("Somatic Disorder \n DSM5 Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_adhd_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_dsm5_adhd_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_dsm5_adhd_r_mean,xmin=0,xmax=4,
+                               ymin=adhd_min, ymax=adhd_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("ADHD DSM5 \n Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_opposit_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_dsm5_opposit_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_dsm5_opposit_r_mean,xmin=0,xmax=4,
+                               ymin=odd_min, ymax=odd_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("ODD DSM5 \n Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_dsm5_conduct_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_dsm5_conduct_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_dsm5_conduct_r_mean,xmin=0,xmax=4,
+                               ymin=conduct_min, ymax=conduct_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("Conduct DSM5 \n Scale"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_07_sct_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_07_sct_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_07_sct_r_mean,xmin=0,xmax=4,
+                               ymin=sct_min, ymax=sct_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("SCT Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_07_ocd_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_07_ocd_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_07_ocd_r_mean,xmin=0,xmax=4,
+                               ymin=ocd_min, ymax=ocd_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("OCD Score"),
+          cbclplot + geom_smooth(aes(x=year,y=cbcl_scr_07_stress_r,
+                                     color=subject_sex,fill=subject_sex),
+                                 method="gam", formula=y~s(x, k=5, bs="cs")) +
+                     geom_point(aes(x=year,y=cbcl_scr_07_stress_r_mean,
+                                    color=subject_sex),
+                                position=position_dodge(width=.2)) +
+                     geom_errorbar(aes(x=year,y=cbcl_scr_07_stress_r_mean,xmin=0,xmax=4,
+                               ymin=stress_min, ymax=stress_max, color=subject_sex),
+                               width=.1, position=position_dodge(width=.2), show.legend=F) +
+                     ylab("Stress Score"),
+          ncol = 5, nrow = 5, common.legend = T, legend = "top", align = "v"),
+bottom = ggpubr::text_grob(label = "Year",size = 7))
+dev.off()
+```

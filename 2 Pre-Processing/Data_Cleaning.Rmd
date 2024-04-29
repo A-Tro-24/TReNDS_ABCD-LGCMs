@@ -1,0 +1,112 @@
+---
+title: "Data Cleaning for ABCD Data"
+author: "Aidan H. Troha"
+date: Sys.date()
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(readr)
+```
+
+```{r}
+# Importing the data from .csv files
+cbcl <- read_csv("../1 Data/raw_data/cbcl_data.csv")  %>%
+## Removes unnecessary ID variable
+        dplyr::select(!(...1))
+neurocog <- read_csv("../1 Data/raw_data/neurocog_data.csv")  %>%
+## Removes unnecessary ID variable
+        dplyr::select(!(...1))
+
+demo <- read_csv("../1 Data/raw_data/demo_data.csv") %>%
+## Removes unnecessary ID variable
+        dplyr::select(!(...1))
+
+accessory <- read_csv("../1 Data/raw_data/accessoryinfo.csv") %>%
+## Removes unnecessary ID variable
+             dplyr::select(!(...1)) %>%
+             filter(eventname=="baseline_year_1_arm_1")
+```
+
+```{r}
+# Data Cleaning for Neurocog data
+neuro_data <- demo %>%
+                filter(eventname == "baseline_year_1_arm_1") %>%
+### Chooses id, event, sex, and SES variables from the 'demo' dataset
+                dplyr::select(src_subject_id,demo_sex_v2,eventname) %>%
+### Restructures the dataframe to uniquely assign one sex outcome with its corresponding, 
+  # unique individual
+                pivot_wider(names_from=eventname,values_from=demo_sex_v2) %>%
+### Removes empty columns and renames relic variable from the pivot_wider() function
+                dplyr::select(src_subject_id,baseline_year_1_arm_1) %>%
+                rename(subject_sex = baseline_year_1_arm_1) %>%
+### Merges the data based on subject id to add subject sex variable
+                right_join(neurocog,by="src_subject_id") %>%
+### Merges the data based on subject id and interview time to add subject age variable
+                left_join(accessory[,c("src_subject_id","eventname","interview_age","interview_date",
+                                       "site_id_l","rel_family_id")],
+                          by=c("src_subject_id","eventname")) %>%
+### Removes Intersex-Male and Intersex-Female individuals
+                filter(subject_sex %in% c("1","2")) %>%
+### Pulls the year number from 'eventname' and converts the output into an integer value
+                mutate(subject_sex = ifelse(subject_sex == 1,0,1),
+                       year = ifelse(gsub(".*?([a-z]+).*", "\\1", eventname) == "baseline",
+                                          0,as.numeric(gsub(".*?([0-9]+).*", "\\1", eventname))),
+### Converts the class of 'subject_sex' to an ordered factor
+                       subject_sex = factor(subject_sex,
+                                            levels=0:1,
+                                            labels=c("Male","Female")),
+                       interview_date = as.Date(interview_date, format=c("%m/%d/%Y"))) %>%
+                relocate(c(nihtbx_list_uncorrected,nihtbx_cardsort_uncorrected,
+                           nihtbx_fluidcomp_uncorrected,nihtbx_totalcomp_uncorrected,
+                           eventname,nihtbx_cryst_uncorrected,
+                           contains("rawscore")),
+                           .after = last_col()) %>%
+                relocate(c(year,subject_sex,interview_age,interview_date,site_id_l,rel_family_id),
+                         .after=src_subject_id) %>%
+### Removes variables that will not be included in the exploratory data analysis
+                dplyr::select(src_subject_id:nihtbx_reading_uncorrected)
+```
+
+```{r}
+# Data Cleaning for CBCL data
+cbcl_data <- demo %>%
+### Chooses id, event, and sex variables from the 'demo' dataset
+                dplyr::select(src_subject_id,eventname,demo_sex_v2) %>%
+### Restructures the dataframe to uniquely assign one sex outcome with its corresponding, 
+  # unique individual
+                pivot_wider(names_from=eventname,values_from=demo_sex_v2) %>%
+### Removes empty columns and renames relic variable from the pivot_wider() function
+                dplyr::select(src_subject_id,baseline_year_1_arm_1) %>%
+                rename(subject_sex = baseline_year_1_arm_1) %>%
+### Merges the data based on subject id to add subject sex variable
+                right_join(cbcl,by="src_subject_id") %>%
+### Merges the data based on subject id and interview time to add subject age variable
+                left_join(accessory[,c("src_subject_id","eventname","interview_age","interview_date",
+                                       "site_id_l","rel_family_id")],
+                          by=c("src_subject_id","eventname")) %>%
+### Removes Intersex-Male and Intersex-Female individuals
+                filter(subject_sex %in% c("1","2")) %>%
+                dplyr::select(!ends_with("_t")) %>%
+### Pulls the year number from 'eventname' and converts the output into an integer value
+                mutate(subject_sex = ifelse(subject_sex == 1,0,1),
+                       year = ifelse(gsub(".*?([a-z]+).*", "\\1", eventname) == "baseline",
+                                          0,as.numeric(gsub(".*?([0-9]+).*", "\\1", eventname))),
+### Converts the class of 'subject_sex' to an ordered factor
+                       subject_sex = factor(subject_sex,
+                                            levels=0:1,
+                                            labels=c("Male","Female")),
+                       interview_date = as.Date(interview_date, format=c("%m/%d/%Y"))) %>%
+### Removes duplicated time variable and discontinued variables
+                dplyr::select(!(eventname)) %>%
+### Pushes year, sex, age, and site_id variables to the front of the data set 
+                relocate(c(year,subject_sex,interview_age,interview_date,site_id_l,rel_family_id),
+                         .after=src_subject_id)
+```
+
+```{r}
+# Saves the clean data sets to a .csv file in the host
+write_csv(neuro_data,file="../1 Data/clean_data/clean_neuro_data.csv")
+write_csv(cbcl_data,file="../1 Data/clean_data/clean_cbcl_data.csv")
+```
