@@ -44,7 +44,7 @@ for (i in 1:length(preds)) {
 summary(lmer(i ~ subject_sex + latent_factor_ss_general_ses + reshist_addr1_coi_r_coi_nat + 
                 reshist_addr1_adi_wsum + reshist_addr1_svi_tot_20142018 + 
                 (1|site_id_l) + (1|rel_family_id),
-             preds[[6]]))
+             preds[[3]]))
 summary(lmer(s ~ subject_sex + latent_factor_ss_general_ses + reshist_addr1_coi_r_coi_nat + 
                 reshist_addr1_adi_wsum + reshist_addr1_svi_tot_20142018 + 
                 (1|site_id_l) + (1|rel_family_id),
@@ -58,7 +58,7 @@ summary(lmer(s ~ subject_sex + latent_factor_ss_general_ses + reshist_addr1_coi_
 ```{r}
 fit_compare <- list()
 for (i in 1:length(data)) {
-    if (gsub("(.*),(.*)","\\2",names(mod_int)[i]) == "Linear Model") {
+    if (gsub("(.*),(.*)","\\2",names(preds)[i]) == "Linear Model") {
         fit_compare[[i]] <- lapply(list(lmer(i ~ subject_sex + latent_factor_ss_general_ses +
                                                  reshist_addr1_adi_wsum +
                                                  reshist_addr1_coi_r_coi_nat + 
@@ -70,9 +70,9 @@ for (i in 1:length(data)) {
                                                  reshist_addr1_coi_r_coi_nat + 
                                                  reshist_addr1_svi_tot_20142018 +
                                                  (1|site_id_l) + (1|rel_family_id),
-                                             preds[[i]])),step)
+                                             preds[[i]])),FUN=lmerTest::step)
         names(fit_compare[[i]]) <- c("Intercept","1st Order Slope")
-    } else if (gsub("(.*),(.*)","\\2",names(mod_int)[i]) == "Quadratic Model") {
+    } else if (gsub("(.*),(.*)","\\2",names(preds)[i]) == "Quadratic Model") {
         fit_compare[[i]] <- lapply(list(lmer(i ~ subject_sex + latent_factor_ss_general_ses +
                                                  reshist_addr1_adi_wsum +
                                                  reshist_addr1_coi_r_coi_nat + 
@@ -90,7 +90,7 @@ for (i in 1:length(data)) {
                                                  reshist_addr1_coi_r_coi_nat + 
                                                  reshist_addr1_svi_tot_20142018 +
                                                  (1|site_id_l) + (1|rel_family_id),
-                                             preds[[i]])),step)
+                                             preds[[i]])),FUN=lmerTest::step)
         names(fit_compare[[i]]) <- c("Intercept","1st Order Slope","2nd Order Slope")
     }
     names(fit_compare)[i] <- names(data)[i]
